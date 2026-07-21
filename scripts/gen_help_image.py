@@ -164,15 +164,35 @@ def build_html() -> str:
 """
 
 
+def _optimize_png(path: Path) -> None:
+    """压缩截图体积，降低 QQ/NapCat 经 base64 发送时的超时风险.
+
+    设计画布宽 1100；device_scale_factor=1 时像素约 1100x~1450。
+    对文字帮助图做 256 色量化通常可在观感几乎不变的情况下显著缩小体积。
+    """
+    from PIL import Image
+
+    with Image.open(path) as im:
+        # 保留 alpha（若有），否则按 RGB 量化
+        if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+            rgba = im.convert("RGBA")
+            quantized = rgba.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
+        else:
+            rgb = im.convert("RGB")
+            quantized = rgb.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
+        quantized.save(path, format="PNG", optimize=True)
+
+
 async def render() -> None:
     html_path = ROOT / "assets" / "_help_preview.html"
     html_path.write_text(build_html(), encoding="utf-8")
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch()
+            # device_scale_factor=1：避免 2x 出 2200x2896 大图导致 NapCat sendMsg 超时
             page = await browser.new_page(
                 viewport={"width": 1100, "height": 1600},
-                device_scale_factor=2,
+                device_scale_factor=1,
             )
             await page.goto(html_path.as_uri(), wait_until="networkidle")
             await page.evaluate(
@@ -194,7 +214,10 @@ async def render() -> None:
             await browser.close()
         if not OUT_PNG.is_file():
             raise RuntimeError(f"screenshot did not write {OUT_PNG}")
-        print(f"saved {OUT_PNG} ({OUT_PNG.stat().st_size} bytes)")
+        raw_size = OUT_PNG.stat().st_size
+        _optimize_png(OUT_PNG)
+        opt_size = OUT_PNG.stat().st_size
+        print(f"saved {OUT_PNG} ({raw_size} -> {opt_size} bytes)")
     finally:
         html_path.unlink(missing_ok=True)
 

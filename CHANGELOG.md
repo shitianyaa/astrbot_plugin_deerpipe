@@ -10,6 +10,7 @@
   - 本地重生成脚本：`python scripts/gen_help_image.py`（仅开发机，非运行时依赖）
 
 ### Fixed
+- **帮助图发送超时**: 将 `assets/help.png` 从 2x 截图（约 2200×2896 / 462KB）改为 1x + 调色板压缩（约 1100×1448 / ~80KB），降低 NapCat/aiocqhttp 经 base64 发送时 `sendMsg` 超时（retcode 1200）的概率
 - **私聊/唤醒双发**: slash 命令与纯文本 regex 在私聊或 @Bot 时会同时激活；现在对帮助/打卡/鹿历共用 `event.extra` 幂等键，并在处理后 `stop_event`，避免重复发送
 - 打卡/鹿历路径在设置 dedup 后用 `finally` 保证 `stop_event`，避免异常时事件继续落到 LLM
 - 纯文本英文帮助触发改为大小写不敏感；允许「鹿 帮助」类中文空格；「鹿 帮助」不再误走打卡
