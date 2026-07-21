@@ -17,6 +17,7 @@ from ...application.services.deer_service import DeerResult
 from ...domain import TEMPLATE_GROUP_ONLY
 from ...infrastructure import extract_mention_user_ids, get_logger
 from ...shared import ResourcePaths
+from ...shared.constants import EVENT_DEDUP_DEER
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
@@ -128,6 +129,21 @@ class DeerCommandHandler:
         Yields:
             发送给用户的响应
         """
+        if event.get_extra(EVENT_DEDUP_DEER):
+            return
+        event.set_extra(EVENT_DEDUP_DEER, True)
+
+        # 进入本路径后无论成败都 stop，避免 dedup 已置位但事件继续落到 LLM
+        try:
+            async for result in self._run_deer_checkin_body(event, html_render):
+                yield result
+        finally:
+            event.stop_event()
+
+    async def _run_deer_checkin_body(
+        self, event: AstrMessageEvent, html_render
+    ) -> AsyncGenerator[Any, None]:
+        """打卡主流程（不含 dedup / stop_event）."""
         messages = event.message_obj.message
         at_list = [m for m in messages if isinstance(m, At)]
         at_ids = extract_mention_user_ids(at_list)

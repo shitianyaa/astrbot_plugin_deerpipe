@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from astrbot.core.message.components import At
 
 from ...infrastructure import extract_mention_user_ids, get_logger
+from ...shared.constants import EVENT_DEDUP_CALENDAR
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
@@ -141,6 +142,32 @@ class CalendarCommandHandler:
         Yields:
             发送给用户的响应
         """
+        if event.get_extra(EVENT_DEDUP_CALENDAR):
+            return
+        event.set_extra(EVENT_DEDUP_CALENDAR, True)
+
+        try:
+            async for result in self._run_calendar_query_body(
+                event,
+                month_date,
+                html_render,
+                self_title=self_title,
+                other_title_suffix=other_title_suffix,
+            ):
+                yield result
+        finally:
+            event.stop_event()
+
+    async def _run_calendar_query_body(
+        self,
+        event: AstrMessageEvent,
+        month_date: dt.date,
+        html_render,
+        *,
+        self_title: str | None,
+        other_title_suffix: str,
+    ) -> AsyncGenerator[Any, None]:
+        """日历查询主流程（不含 dedup / stop_event）."""
         messages = event.message_obj.message
         at_list = [m for m in messages if isinstance(m, At)]
         at_ids = extract_mention_user_ids(at_list)
