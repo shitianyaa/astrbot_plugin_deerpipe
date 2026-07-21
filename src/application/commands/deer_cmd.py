@@ -133,6 +133,17 @@ class DeerCommandHandler:
             return
         event.set_extra(EVENT_DEDUP_DEER, True)
 
+        # 进入本路径后无论成败都 stop，避免 dedup 已置位但事件继续落到 LLM
+        try:
+            async for result in self._run_deer_checkin_body(event, html_render):
+                yield result
+        finally:
+            event.stop_event()
+
+    async def _run_deer_checkin_body(
+        self, event: AstrMessageEvent, html_render
+    ) -> AsyncGenerator[Any, None]:
+        """打卡主流程（不含 dedup / stop_event）."""
         messages = event.message_obj.message
         at_list = [m for m in messages if isinstance(m, At)]
         at_ids = extract_mention_user_ids(at_list)
@@ -140,13 +151,11 @@ class DeerCommandHandler:
         if at_ids:
             if event.get_message_type() != MessageType.GROUP_MESSAGE:
                 yield event.plain_result(TEMPLATE_GROUP_ONLY)
-                event.stop_event()
                 return
 
             self_id = event.get_self_id()
             if self_id and self_id in at_ids:
                 yield event.plain_result("不可以帮 Bot🦌哦~")
-                event.stop_event()
                 return
 
             try:
@@ -154,7 +163,6 @@ class DeerCommandHandler:
             except (OSError, RuntimeError, ValueError) as exc:
                 self.logger.error(f"deer_cmd help_other failed: {exc}")
                 yield event.plain_result("操作失败，请稍后重试。")
-                event.stop_event()
                 return
 
             if len(at_ids) == 1:
@@ -166,7 +174,6 @@ class DeerCommandHandler:
                 if not result_data["success"]:
                     reason = result_data.get("reason", "无法帮🦌")
                     yield event.plain_result(f"❌ 无法帮 {target_name} 🦌：{reason}")
-                    event.stop_event()
                     return
 
                 try:
@@ -189,7 +196,6 @@ class DeerCommandHandler:
                 except Exception:
                     logger.error("帮🦌日历渲染异常")
                     yield event.plain_result(f"成功帮{target_name}🦌了")
-                event.stop_event()
                 return
 
             # 批量帮🦌
@@ -208,7 +214,6 @@ class DeerCommandHandler:
                     status = "✅" if r["success"] else "❌"
                     lines.append(f"{status} {r['nickname']} - 第 {r['count']} 次")
                 yield event.plain_result("\n".join(lines))
-            event.stop_event()
             return
 
         # 自我打卡
@@ -226,7 +231,6 @@ class DeerCommandHandler:
         except Exception:
             logger.error("自我打卡日历渲染异常")
             yield event.plain_result(result)
-        event.stop_event()
 
     async def _render_batch_report(
         self, results: list[dict], success_count: int, html_render

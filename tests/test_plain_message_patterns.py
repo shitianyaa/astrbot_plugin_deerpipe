@@ -47,6 +47,10 @@ def test_plain_deer_trigger_rejects_normal_text() -> None:
         "鹿 帮助",
         "鹿菜单",
         "鹿 菜单",
+        "鹿 今天吃什么",
+        "帮鹿 随便",
+        "🦌 你好",
+        "帮🦌 帮一下",
     ):
         assert not pattern.match(text), text
 

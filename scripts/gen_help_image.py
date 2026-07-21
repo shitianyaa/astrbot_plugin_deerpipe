@@ -192,9 +192,11 @@ async def render() -> None:
             await page.wait_for_timeout(400)
             await page.locator("#capture").screenshot(path=str(OUT_PNG), type="png")
             await browser.close()
+        if not OUT_PNG.is_file():
+            raise RuntimeError(f"screenshot did not write {OUT_PNG}")
+        print(f"saved {OUT_PNG} ({OUT_PNG.stat().st_size} bytes)")
     finally:
         html_path.unlink(missing_ok=True)
-    print(f"saved {OUT_PNG} ({OUT_PNG.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":
